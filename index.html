@@ -392,6 +392,9 @@
                     const AudioContext = window.AudioContext || window.webkitAudioContext;
                     this.ctx = new AudioContext();
                 }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
             }
 
             playPop(freq = 400) {
@@ -625,7 +628,6 @@
                 bestScore = score;
                 localStorage.setItem('blockblast_best_score', bestScore);
                 bestScoreEl.textContent = bestScore;
-                submitScoreToFirebase(bestScore);
             }
         }
 
