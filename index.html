@@ -101,18 +101,28 @@
     </header>
 
     <!-- Score & Streak Banner -->
-    <div class="w-full max-w-md grid grid-cols-2 gap-3 z-10 mb-2">
-        <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-3 flex flex-col items-center justify-center shadow-inner">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+    <div class="w-full max-w-md grid grid-cols-3 gap-2 z-10 mb-2">
+        <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-2.5 flex flex-col items-center justify-center shadow-inner">
+            <span class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 truncate">
                 <i class="fa-solid fa-trophy text-amber-400"></i> 최고 점수
             </span>
-            <span id="bestScore" class="text-2xl font-black text-amber-400 tracking-tight">0</span>
+            <span id="bestScore" class="text-xl sm:text-2xl font-black text-amber-400 tracking-tight">0</span>
         </div>
-        <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-3 flex flex-col items-center justify-center shadow-inner">
-            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+        <!-- Timer Box -->
+        <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-2.5 flex flex-col items-center justify-center shadow-inner relative overflow-hidden" id="timerBox">
+            <span class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <i class="fa-solid fa-clock text-rose-400"></i> 제한 시간
+            </span>
+            <span id="timerDisplay" class="text-xl sm:text-2xl font-black text-rose-400 tracking-tight">01:30</span>
+            <div id="timeBonusPopup" class="absolute inset-0 flex items-center justify-center bg-rose-500/90 text-white font-black text-sm pointer-events-none opacity-0 transition-opacity duration-200">
+                +10초!
+            </div>
+        </div>
+        <div class="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-2.5 flex flex-col items-center justify-center shadow-inner">
+            <span class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 truncate">
                 <i class="fa-solid fa-star text-indigo-400"></i> 현재 점수
             </span>
-            <span id="currentScore" class="text-2xl font-black text-white tracking-tight">0</span>
+            <span id="currentScore" class="text-xl sm:text-2xl font-black text-white tracking-tight">0</span>
         </div>
     </div>
 
@@ -548,6 +558,12 @@
         let bestScore = localStorage.getItem('blockblast_best_score') || 0;
         let comboStreak = 0;
 
+        // Timer State (90 seconds = 1min 30sec)
+        const INITIAL_TIME = 90;
+        let timeLeft = INITIAL_TIME;
+        let timerInterval = null;
+        let gameOverReason = '더 이상 블록을 놓을 수 있는 공간이 없습니다.';
+
         // Dragging State
         let activeDrag = {
             slotIndex: null,
@@ -588,6 +604,66 @@
         particles.updateAndRender();
 
         // ==========================================
+        // TIMER SYSTEM
+        // ==========================================
+        function startTimer() {
+            stopTimer();
+            timeLeft = INITIAL_TIME;
+            updateTimerDisplay();
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                
+                if (timeLeft <= 0) {
+                    timeLeft = 0;
+                    stopTimer();
+                    gameOverReason = '⏰ 제한 시간이 모두 지났습니다!';
+                    triggerGameOver();
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function addTime(seconds) {
+            timeLeft += seconds;
+            updateTimerDisplay();
+            showTimeBonusAnimation(seconds);
+        }
+
+        function updateTimerDisplay() {
+            const timerEl = document.getElementById('timerDisplay');
+            if (!timerEl) return;
+            const mins = Math.floor(timeLeft / 60);
+            const secs = timeLeft % 60;
+            timerEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            
+            if (timeLeft <= 10) {
+                timerEl.classList.add('animate-pulse');
+            } else {
+                timerEl.classList.remove('animate-pulse');
+            }
+        }
+
+        function showTimeBonusAnimation(seconds) {
+            const bonusEl = document.getElementById('timeBonusPopup');
+            if (!bonusEl) return;
+            bonusEl.textContent = `+${seconds}초!`;
+            bonusEl.classList.remove('opacity-0');
+            bonusEl.classList.add('opacity-100');
+            setTimeout(() => {
+                bonusEl.classList.remove('opacity-100');
+                bonusEl.classList.add('opacity-0');
+            }, 800);
+        }
+
+        // ==========================================
         // 3. INITIALIZATION & BOARD SETUP
         // ==========================================
         function initGame() {
@@ -595,11 +671,13 @@
             comboStreak = 0;
             gridState = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
             bestScore = parseInt(localStorage.getItem('blockblast_best_score')) || 0;
+            gameOverReason = '더 이상 블록을 놓을 수 있는 공간이 없습니다.';
 
             updateScoreDisplays();
             renderBoard();
             spawnTrayPieces();
             hideGameOver();
+            startTimer();
         }
 
         function renderBoard() {
@@ -890,6 +968,10 @@
                 comboStreak++;
                 soundEngine.playClear(comboStreak);
 
+                // Add +10 seconds per cleared line
+                const addedSeconds = totalLinesCleared * 10;
+                addTime(addedSeconds);
+
                 const cellsToAnimate = new Set();
                 rowsToClear.forEach(r => {
                     for (let c = 0; c < GRID_SIZE; c++) cellsToAnimate.add(`${r},${c}`);
@@ -982,14 +1064,19 @@
 
             const hasRemainingPieces = trayPieces.some(p => p !== null);
             if (hasRemainingPieces && !canMoveExist) {
+                gameOverReason = '더 이상 블록을 놓을 수 있는 공간이 없습니다.';
                 setTimeout(() => triggerGameOver(), 400);
             }
         }
 
         function triggerGameOver() {
+            stopTimer();
             soundEngine.playGameOver();
             finalScoreEl.textContent = score;
             finalBestScoreEl.textContent = Math.max(score, bestScore);
+
+            const modalDesc = document.querySelector('#gameOverModal p');
+            if (modalDesc) modalDesc.textContent = gameOverReason;
 
             gameOverModal.classList.remove('pointer-events-none', 'opacity-0');
             gameOverModal.classList.add('opacity-100');
